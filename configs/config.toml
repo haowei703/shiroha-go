@@ -1,0 +1,15 @@
+[server]
+host = "localhost"
+port = 8080
+
+[database]
+username = "postgres"
+password = "1234"
+host = "localhost"
+port = 5432
+dbname = "shiroha"
+
+[data.redis]
+host = "localhost"
+port = 6379
+password = ""
