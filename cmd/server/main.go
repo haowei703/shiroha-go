@@ -40,9 +40,10 @@ func main() {
 	// 游戏相关路由组
 	gameHandler.Use(gameRouterGroup)
 
-	// 应用杂项路由组
-	miscGroup := handler.MiscRouterGroup{}
-	miscGroup.Use(r)
+	// 杂项路由组
+	miscGroup := r.Group("misc")
+	miscHandler := handler.NewMiscHandler()
+	miscHandler.Use(miscGroup)
 
 	err = r.Run(":3000")
 	if err != nil {

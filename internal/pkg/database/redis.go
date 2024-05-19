@@ -3,8 +3,8 @@ package database
 import (
 	"context"
 	"errors"
+	"github.com/haowei703/shiroha/configs"
 	"github.com/redis/go-redis/v9"
-	"shiroha.com/configs"
 	"strconv"
 )
 

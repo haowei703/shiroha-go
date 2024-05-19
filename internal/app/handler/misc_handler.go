@@ -1,53 +1,21 @@
 package handler
 
 import (
-	"bytes"
 	"github.com/gin-gonic/gin"
+	"github.com/haowei703/shiroha/internal/app/utils"
 	"github.com/mojocn/base64Captcha"
-	"image/png"
-	"math/rand"
 	"net/http"
-	"shiroha.com/internal/app/utils"
-	"time"
 )
 
-type MiscRouterGroup struct {
-	router *gin.RouterGroup
+type MiscHandler struct {
 }
 
-func (group *MiscRouterGroup) Use(router *gin.Engine) {
-	group.router = router.Group("/misc")
-	// 静态路由组，返回一些静态文件
-	staticGroup := group.router.Group("/static")
-	{
-		staticGroup.GET("/qrcode", generateQRCodeHandleFunc)
-		staticGroup.GET("/captcha", generateCaptchaHandleFunc)
-	}
+func NewMiscHandler() *MiscHandler {
+	return &MiscHandler{}
 }
 
-// generateQRCodeHandleFunc 生成二维码
-func generateQRCodeHandleFunc(c *gin.Context) {
-	const charset = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	seed := rand.NewSource(time.Now().UnixNano())
-	randGen := rand.New(seed)
-	code := make([]byte, 4)
-	for i := 0; i < 4; i++ {
-		code[i] = charset[randGen.Intn(len(charset))]
-	}
-	captchaText := string(code)
-	qrCode, err := utils.GenerateQRCode(captchaText)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": http.StatusInternalServerError, "message": "server error"})
-		return
-	}
-
-	var qrCodeBuffer bytes.Buffer
-	if err = png.Encode(&qrCodeBuffer, qrCode); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"status": http.StatusInternalServerError, "message": "server error"})
-	}
-
-	c.Header("Content-Type", "image/png")
-	c.Data(http.StatusOK, "image/png", qrCodeBuffer.Bytes())
+func (m *MiscHandler) Use(group *gin.RouterGroup) {
+	group.GET("/captcha", generateCaptchaHandleFunc)
 }
 
 // generateCaptchaHandleFunc 生成图形验证码
