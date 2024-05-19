@@ -1,0 +1,18 @@
+[keycloak]
+baseUrl = "http://localhost:8080"
+adminRealm = "master"
+clientRealm = "shiroha.love"
+
+[keycloak.admin]
+adminClientID = "shiroha-management"
+adminClientSecret = "ofFJvfoSnCDJCYI14x1k1ziFLdWn58aZ"
+adminUsername = "shiroha-admin"
+adminPassword = "a1436381036"
+
+[keycloak.client]
+clientID = "gin_client"
+clientSecret = "DszRqPSkGOcpBVRPnSrluomopwKn7zKM"
+
+[email_api]
+requestUrl = "https://www.aoksend.com/index/api/send_email"
+appKey = "ce66fc1a7d3151160fc3ae70e3b3efc2"
