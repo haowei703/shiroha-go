@@ -1,8 +1,13 @@
 package auth
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"github.com/Nerzal/gocloak/v13"
+	"github.com/goccy/go-json"
+	"io"
+	"net/http"
 )
 
 // KeyCloakApi 与keycloak交互方法
@@ -11,30 +16,50 @@ type KeyCloakApi struct {
 	Client *gocloak.GoCloak
 }
 
+type RequestBody struct {
+	AppKey     string `json:"app_key"`
+	TemplateId string `json:"template_id"`
+	To         string `json:"to"`
+	Data       string `json:"data"`
+}
+
 func NewKeyCloakApi(config KeyCloakConfig, client *gocloak.GoCloak) *KeyCloakApi {
 	return &KeyCloakApi{Config: config, Client: client}
 }
 
 // Init 初始化操作
 func Init() (*KeyCloakApi, error) {
-	config, err := LoadConfig()
+	keyCloakConfig, err := LoadConfig()
 	if err != nil {
 		return nil, err
 	}
 
-	client := gocloak.NewClient(config.BaseURL)
-	api := NewKeyCloakApi(*config, client)
+	client := gocloak.NewClient(keyCloakConfig.KeyCloak.BaseURL)
+	api := NewKeyCloakApi(*keyCloakConfig, client)
 	return api, nil
 }
 
-// createUser 新建用户
-func (api *KeyCloakApi) createUser(user User) error {
+// LoginAdmin 管理员登录获取token
+func (api *KeyCloakApi) LoginAdmin() (*gocloak.JWT, error) {
 	client := api.Client
-	config := api.Config
+	config := api.Config.KeyCloak
 	ctx := context.Background()
+
 	token, err := client.LoginClient(ctx, config.Admin.AdminClientID, config.Admin.AdminClientSecret, config.AdminRealm)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	return token, nil
+}
+
+// CreateUser 新建用户
+func (api *KeyCloakApi) CreateUser(user User) (*string, error) {
+	client := api.Client
+	config := api.Config.KeyCloak
+	ctx := context.Background()
+	token, err := api.LoginAdmin()
+	if err != nil {
+		return nil, err
 	}
 
 	credential := []gocloak.CredentialRepresentation{
@@ -46,24 +71,86 @@ func (api *KeyCloakApi) createUser(user User) error {
 	}
 
 	newUser := gocloak.User{
-		Email:       gocloak.StringP(user.Email),
-		Enabled:     gocloak.BoolP(true),
-		Username:    gocloak.StringP("user@" + user.Email),
-		Credentials: &credential,
+		Email:         gocloak.StringP(user.Email),
+		Enabled:       gocloak.BoolP(true),
+		EmailVerified: gocloak.BoolP(false),
+		Username:      gocloak.StringP("user@" + user.Email),
+		Credentials:   &credential,
 	}
 
-	_, err = client.CreateUser(ctx, token.AccessToken, config.ClientRealm, newUser)
+	var uid string
+	uid, err = client.CreateUser(ctx, token.AccessToken, config.ClientRealm, newUser)
+	if err != nil {
+		return nil, err
+	}
+	return &uid, nil
+}
 
+// GetUserByID 获取用户详细信息
+func (api *KeyCloakApi) GetUserByID(id *string) (*gocloak.User, error) {
+	client := api.Client
+	config := api.Config.KeyCloak
+	ctx := context.Background()
+	token, err := api.LoginAdmin()
+	if err != nil {
+		return nil, err
+	}
+	return client.GetUserByID(ctx, token.AccessToken, config.ClientRealm, gocloak.PString(id))
+}
+
+// UpdateUser 更新用户
+func (api *KeyCloakApi) UpdateUser(user gocloak.User) error {
+	client := api.Client
+	config := api.Config.KeyCloak
+	ctx := context.Background()
+
+	token, err := api.LoginAdmin()
+	if err != nil {
+		return err
+	}
+	err = client.UpdateUser(ctx, token.AccessToken, config.ClientRealm, user)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-// loginByPassword 用户登录并获取token
-func (api *KeyCloakApi) loginByPassword(user User) (*gocloak.JWT, *gocloak.UserInfo, error) {
+// SendMail 发送邮件接口
+func (api *KeyCloakApi) SendMail(templateId string, to string, data string) error {
+	emailConfig := api.Config.EmailApiConfig
+
+	body := RequestBody{
+		AppKey:     emailConfig.AppKey,
+		TemplateId: templateId,
+		To:         to,
+		Data:       data,
+	}
+
+	jsonData, err := json.Marshal(body)
+	req, err := http.NewRequest("POST", emailConfig.RequestUrl, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+
+	httpClient := &http.Client{}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		responseBody, _ := io.ReadAll(resp.Body)
+		return errors.New(string(responseBody))
+	}
+	return nil
+}
+
+// LoginByPassword 用户登录并获取token
+func (api *KeyCloakApi) LoginByPassword(user User) (*gocloak.JWT, *gocloak.UserInfo, error) {
 	client := api.Client
-	config := api.Config
+	config := api.Config.KeyCloak
 	ctx := context.Background()
 
 	// 获取登录token，使用邮箱+密码登录方式
@@ -71,7 +158,7 @@ func (api *KeyCloakApi) loginByPassword(user User) (*gocloak.JWT, *gocloak.UserI
 	if err != nil {
 		return nil, nil, err
 	}
-	userInfo, err := client.GetUserInfo(ctx, token.AccessToken, api.Config.ClientRealm)
+	userInfo, err := client.GetUserInfo(ctx, token.AccessToken, api.Config.KeyCloak.ClientRealm)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -82,7 +169,7 @@ func (api *KeyCloakApi) loginByPassword(user User) (*gocloak.JWT, *gocloak.UserI
 // Logout 用户登出
 func (api *KeyCloakApi) Logout(refreshToken string) error {
 	client := api.Client
-	config := api.Config
+	config := api.Config.KeyCloak
 	ctx := context.Background()
 
 	// 调用 gocloak 的 Logout 方法
@@ -97,7 +184,7 @@ func (api *KeyCloakApi) Logout(refreshToken string) error {
 // RefreshToken 刷新访问令牌
 func (api *KeyCloakApi) RefreshToken(refreshToken string) (*gocloak.JWT, error) {
 	client := api.Client
-	config := api.Config
+	config := api.Config.KeyCloak
 	ctx := context.Background()
 
 	// 调用 gocloak 的 RefreshToken 方法
@@ -112,7 +199,7 @@ func (api *KeyCloakApi) RefreshToken(refreshToken string) (*gocloak.JWT, error) 
 // CheckUserRole 检查用户是否拥有特定角色
 func (api *KeyCloakApi) CheckUserRole(userID, roleName string) (bool, error) {
 	client := api.Client
-	config := api.Config
+	config := api.Config.KeyCloak
 	ctx := context.Background()
 	token, err := client.LoginClient(ctx, config.Admin.AdminClientID, config.Admin.AdminClientSecret, config.AdminRealm)
 	if err != nil {
@@ -137,7 +224,7 @@ func (api *KeyCloakApi) CheckUserRole(userID, roleName string) (bool, error) {
 // AddUserToGroup 将用户加入群组
 func (api *KeyCloakApi) AddUserToGroup(userID, groupID string) error {
 	client := api.Client
-	config := api.Config
+	config := api.Config.KeyCloak
 	ctx := context.Background()
 	token, err := client.LoginClient(ctx, config.Admin.AdminClientID, config.Admin.AdminClientSecret, config.AdminRealm)
 	if err != nil {
@@ -151,4 +238,19 @@ func (api *KeyCloakApi) AddUserToGroup(userID, groupID string) error {
 	}
 
 	return nil
+}
+
+// ValidateToken 验证用户的 JWT token 是否有效
+func (api *KeyCloakApi) ValidateToken(token string) (*bool, error) {
+	client := api.Client
+	config := api.Config.KeyCloak
+	ctx := context.Background()
+
+	// 使用 RPT Token, 也可以选择使用其他方式来验证
+	rptResult, err := client.RetrospectToken(ctx, token, config.Client.ClientID, config.Client.ClientSecret, config.ClientRealm)
+	if err != nil {
+		return gocloak.BoolP(false), err
+	}
+
+	return rptResult.Active, nil
 }

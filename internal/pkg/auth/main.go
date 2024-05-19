@@ -1,62 +1,104 @@
 package auth
 
 import (
+	"encoding/json"
+	"github.com/Nerzal/gocloak/v13"
 	"github.com/gin-gonic/gin"
 	"net/http"
+	"shiroha.com/configs"
 	"shiroha.com/internal/app/utils"
 	"strconv"
 	"strings"
 )
 
+var (
+	serverConfig *configs.ServerConfig
+)
+
 type KeyCloakRouter struct {
+	engine    *gin.Engine
 	authGroup *gin.RouterGroup
+	api       *KeyCloakApi
 }
 
-func EnableOAuth2(r *gin.Engine) {
+func NewKeyCloakRouter(engine *gin.Engine) *KeyCloakRouter {
+	return &KeyCloakRouter{engine: engine}
+}
 
-	// 认证路由组
-	authGroup := r.Group("/auth")
+// Init 初始化操作
+func (key *KeyCloakRouter) Init() error {
+	config, err := configs.LoadConfig()
+	if err != nil {
+		return err
+	}
+	serverConfig = &config.Server
+
+	key.authGroup = key.engine.Group("/auth")
 	keyCloakApi, err := Init()
 	if err != nil {
-		panic(err)
+		return err
 	}
-	authGroup.Use(ApiMiddleware(keyCloakApi))
 
-	authGroup.POST("/login", login)
-	authGroup.POST("/register", register)
+	key.api = keyCloakApi
+	key.authGroup.Use(ApiMiddleware(keyCloakApi))
+	key.authGroup.POST("/login", Login)
+	key.authGroup.POST("/register", Register)
+	key.authGroup.GET("/verify", Verify)
 
+	return nil
 }
 
-// login 登录
-func login(c *gin.Context) {
+// SetProtectRule 设置保护规则，保护路由
+func (key *KeyCloakRouter) SetProtectRule(routes gin.IRoutes) {
+	routes.Use(ApiMiddleware(key.api))
+	routes.Use(AuthenticateMiddleware())
+}
+
+// Login 登录
+func Login(c *gin.Context) {
 	var user User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		utils.Error(c, http.StatusUnprocessableEntity, "invalid json")
 	}
 
 	api, exists := c.Get("keyCloakApi")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
+		utils.Error(c, http.StatusInternalServerError, "internal server error")
 	}
 	keyCloakApi := api.(*KeyCloakApi)
-	token, userInfo, err := keyCloakApi.loginByPassword(user)
+	token, userInfo, err := keyCloakApi.LoginByPassword(user)
 	if err != nil {
 		if strings.Contains(err.Error(), "401") {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication failed"})
+			utils.Error(c, http.StatusUnauthorized, "unauthorized")
+		} else if strings.Contains(err.Error(), "400") {
+			utils.Error(c, http.StatusBadRequest, "The mailbox is not verified")
 		} else {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+			utils.Error(c, http.StatusInternalServerError, "internal server error")
 		}
 		return
 	}
-	c.SetCookie("csrf_token", token.AccessToken, token.ExpiresIn, "/", "localhost", false, true) // Secure 和 HttpOnly 标志根据需要调整
-	c.SetCookie("session", token.SessionState, token.ExpiresIn, "/", "localhost", false, true)
-	c.SetCookie("uid", *userInfo.Sub, token.ExpiresIn, "/", "localhost", false, false)
-	c.JSON(http.StatusOK, gin.H{"message": "Login successful"})
+
+	c.SetCookie("csrf_token", token.AccessToken, token.ExpiresIn, "/", serverConfig.Host, false, true)
+	c.SetCookie("refresh_token", token.RefreshToken, token.RefreshExpiresIn, "/", serverConfig.Host, false, true)
+	c.SetCookie("session", token.SessionState, token.ExpiresIn, "/", serverConfig.Host, false, true)
+	c.SetCookie("uid", *userInfo.Sub, token.ExpiresIn, "/", serverConfig.Host, false, false)
+	userDetail, err := keyCloakApi.GetUserByID(userInfo.Sub)
+	if err != nil {
+		utils.Error(c, http.StatusInternalServerError, "internal server error")
+		return
+	}
+	var userData UserInfo
+	if attributes := userDetail.Attributes; attributes != nil {
+		if avatar, ok := (*attributes)["avatar"]; ok {
+			userData.Avatar = avatar[0]
+		}
+	}
+
+	utils.Success(c, userData)
 }
 
-// register 注册
-func register(c *gin.Context) {
+// Register 注册
+func Register(c *gin.Context) {
 	var request struct {
 		Email        string `json:"email"`
 		Password     string `json:"password"`
@@ -64,7 +106,7 @@ func register(c *gin.Context) {
 		CaptchaValue int    `json:"captchaValue"`
 	}
 	if err := c.ShouldBindJSON(&request); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
+		utils.Error(c, http.StatusUnprocessableEntity, "invalid json")
 	}
 
 	param := utils.ConfigJsonBody{
@@ -72,8 +114,7 @@ func register(c *gin.Context) {
 		VerifyValue: strconv.Itoa(request.CaptchaValue),
 	}
 	if !utils.CaptchaVerify(param) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Captcha verify failed"})
-		return
+		utils.Error(c, http.StatusUnprocessableEntity, "invalid captcha")
 	}
 
 	user := User{
@@ -83,37 +124,56 @@ func register(c *gin.Context) {
 
 	api, exists := c.Get("keyCloakApi")
 	if !exists {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-		return
+		utils.Error(c, http.StatusInternalServerError, "internal server error")
 	}
 
 	keyCloakApi := api.(*KeyCloakApi)
-	err := keyCloakApi.createUser(user)
+	uid, err := keyCloakApi.CreateUser(user)
 	if err != nil {
-		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		utils.Error(c, http.StatusConflict, "user already exists")
 	} else {
-		c.JSON(http.StatusOK, gin.H{"msg": "Use created successfully"})
+		data := struct {
+			Uid   string `json:"uid"`
+			Email string `json:"email"`
+		}{
+			Uid:   gocloak.PString(uid),
+			Email: user.Email,
+		}
+		var jsonData []byte
+		jsonData, err = json.Marshal(data)
+		err = keyCloakApi.SendMail("E_100489674255", user.Email, string(jsonData))
+		if err != nil {
+			utils.Error(c, http.StatusInternalServerError, "unable to send email")
+		}
+		utils.Success(c, nil)
 	}
 }
 
-// getUserID 获取用户ID
-//func getUserID(c *gin.Context) {
-//	var user Use
-//	if err := c.ShouldBindJSON(&user); err != nil {
-//		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
-//	}
-//
-//	api, exists := c.Get("keyCloakApi")
-//	if !exists {
-//		c.JSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-//		return
-//	}
-//
-//	keyCloakApi := api.(*KeyCloakApi)
-//	uid, err := keyCloakApi.
-//	if err != nil {
-//		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-//	} else {
-//		c.JSON(http.StatusOK, gin.H{"data": uid})
-//	}
-//}
+// Verify 验证用户邮箱
+func Verify(c *gin.Context) {
+	userId := c.Query("uid")
+	if userId == "" {
+		utils.Error(c, http.StatusUnprocessableEntity, "invalid user id")
+		return
+	}
+
+	api, exists := c.Get("keyCloakApi")
+	keyCloakApi := api.(*KeyCloakApi)
+	if !exists {
+		utils.Error(c, http.StatusInternalServerError, "internal server error")
+	}
+
+	user := gocloak.User{
+		ID:            gocloak.StringP(userId),
+		EmailVerified: gocloak.BoolP(true),
+	}
+
+	err := keyCloakApi.UpdateUser(user)
+	if err != nil {
+		utils.Error(c, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	successURL := serverConfig.Host
+	http.Redirect(c.Writer, c.Request, successURL, http.StatusSeeOther)
+}
