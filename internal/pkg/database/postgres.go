@@ -22,7 +22,7 @@ func (d *PostgresDB) Init() error {
 		return errors.New("Error loading config: " + err.Error())
 	}
 
-	databaseConfig := configs.ExportDatabaseConfig(config)
+	databaseConfig := config.Database
 	d.username = databaseConfig.Username
 	d.password = databaseConfig.Password
 	d.host = databaseConfig.Host

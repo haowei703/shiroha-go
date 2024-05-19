@@ -21,10 +21,10 @@ func (r *Redis) Init() error {
 		return errors.New("Error loading config: " + err.Error())
 	}
 
-	redisConfig := configs.ExportRedisConfig(config)
-	r.host = redisConfig.Redis.Host
-	r.port = redisConfig.Redis.Port
-	r.password = redisConfig.Redis.Password
+	redisConfig := config.Data.Redis
+	r.host = redisConfig.Host
+	r.port = redisConfig.Port
+	r.password = redisConfig.Password
 	return nil
 }
 
