@@ -3,9 +3,9 @@ package database
 import (
 	"context"
 	"fmt"
+	"github.com/haowei703/shiroha/configs"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
-	"shiroha.com/configs"
 )
 
 type MongoDBOptions struct {

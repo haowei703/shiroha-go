@@ -3,9 +3,9 @@ package database
 import (
 	"errors"
 	"fmt"
+	"github.com/haowei703/shiroha/configs"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"shiroha.com/configs"
 )
 
 type PostgresDB struct {
