@@ -2,8 +2,9 @@ package utils
 
 import (
 	"fmt"
+	"github.com/haowei703/shiroha/internal/pkg/database"
 	"github.com/mojocn/base64Captcha"
-	"shiroha.com/internal/pkg/database"
+
 	"time"
 )
 
