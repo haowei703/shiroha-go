@@ -1,8 +1,8 @@
 package service
 
 import (
-	"shiroha.com/internal/app/dao"
-	"shiroha.com/internal/app/model"
+	"github.com/haowei703/shiroha/internal/app/dao"
+	"github.com/haowei703/shiroha/internal/app/model"
 )
 
 type GameService struct {

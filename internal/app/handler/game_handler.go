@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/goccy/go-json"
+	"github.com/haowei703/shiroha/internal/app/model"
+	response2 "github.com/haowei703/shiroha/internal/app/response"
+	"github.com/haowei703/shiroha/internal/app/service"
+	"github.com/haowei703/shiroha/internal/app/utils"
 	"net/http"
-	"shiroha.com/internal/app/model"
-	response2 "shiroha.com/internal/app/response"
-	"shiroha.com/internal/app/service"
-	"shiroha.com/internal/app/utils"
 	"strconv"
 	"time"
 )
@@ -22,9 +22,8 @@ func NewGameHandler(gameService *service.GameService, redisUtils *utils.RedisUti
 	return &GameHandler{gameService: *gameService, redisCache: *redisUtils}
 }
 
-func (handler *GameHandler) Use(r *gin.Engine) {
-	r.GET("/games", handler.listGamesByPage)
-
+func (handler *GameHandler) Use(group *gin.RouterGroup) {
+	group.GET("/games", handler.listGamesByPage)
 }
 
 func (handler *GameHandler) listGamesByPage(c *gin.Context) {
@@ -48,13 +47,8 @@ func (handler *GameHandler) listGamesByPage(c *gin.Context) {
 	response.Pagination.CurrentPage = page
 	response.Pagination.PageSize = pageSize
 
-	// 获取游戏总数，查询缓存失败则查询数据库
-	totalCountStr, err := handler.redisCache.GetString("games:count")
-	totalCount, _ := strconv.ParseInt(totalCountStr, 10, 64)
-	if err != nil {
-		totalCount, _ = handler.gameService.CountGames()
-		response.Pagination.TotalCount = totalCount
-	}
+	// 获取游戏总数
+	totalCount, _ := handler.gameService.CountGames()
 	response.Pagination.TotalCount = totalCount
 
 	// 先去缓存中查找数据

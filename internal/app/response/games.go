@@ -1,7 +1,7 @@
 package response
 
 import (
-	"shiroha.com/internal/app/model"
+	"github.com/haowei703/shiroha/internal/app/model"
 )
 
 type Pagination struct {

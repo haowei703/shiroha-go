@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"github.com/Nerzal/gocloak/v13"
 	"github.com/gin-gonic/gin"
+	"github.com/haowei703/shiroha/configs"
+	"github.com/haowei703/shiroha/internal/app/utils"
 	"net/http"
-	"shiroha.com/configs"
-	"shiroha.com/internal/app/utils"
+
 	"strconv"
 	"strings"
 )

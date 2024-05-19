@@ -3,12 +3,12 @@ package main
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"shiroha.com/internal/app/dao"
-	"shiroha.com/internal/app/handler"
-	"shiroha.com/internal/app/service"
-	"shiroha.com/internal/app/utils"
-	"shiroha.com/internal/pkg/auth"
-	"shiroha.com/internal/pkg/database"
+	"github.com/haowei703/shiroha/internal/app/dao"
+	"github.com/haowei703/shiroha/internal/app/handler"
+	"github.com/haowei703/shiroha/internal/app/service"
+	"github.com/haowei703/shiroha/internal/app/utils"
+	"github.com/haowei703/shiroha/internal/pkg/auth"
+	"github.com/haowei703/shiroha/internal/pkg/database"
 )
 
 func main() {
@@ -16,8 +16,11 @@ func main() {
 	r := gin.Default()
 
 	// 启用OAuth2.0认证
-	auth.EnableOAuth2(r)
-
+	authRouter := auth.NewKeyCloakRouter(r)
+	err := authRouter.Init()
+	if err != nil {
+		panic(err)
+	}
 	// 注入数据库依赖
 	db, err := database.NewPostgresDB()
 	if err != nil {
@@ -31,9 +34,11 @@ func main() {
 		panic(err)
 	}
 	redisUtils := utils.NewRedisUtils(rdb)
+	gameRouterGroup := r.Group("/")
+	authRouter.SetProtectRule(gameRouterGroup)
 	gameHandler := handler.NewGameHandler(gameService, redisUtils)
 	// 游戏相关路由组
-	gameHandler.Use(r)
+	gameHandler.Use(gameRouterGroup)
 
 	// 应用杂项路由组
 	miscGroup := handler.MiscRouterGroup{}

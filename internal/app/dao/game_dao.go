@@ -3,9 +3,9 @@
 package dao
 
 import (
+	"github.com/haowei703/shiroha/internal/app/model"
 	"gorm.io/gorm"
 	"math"
-	"shiroha.com/internal/app/model"
 )
 
 type GameDao struct {
