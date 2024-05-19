@@ -1,41 +1,46 @@
 package auth
 
 import (
-	"gopkg.in/yaml.v3"
+	"fmt"
+	"github.com/BurntSushi/toml"
 	"os"
 	"path/filepath"
 )
 
 type KeyCloakConfig struct {
-	BaseURL     string         `yaml:"baseUrl"`
-	AdminRealm  string         `yaml:"adminRealm"`
-	ClientRealm string         `yaml:"clientRealm"`
-	Admin       KeycloakAdmin  `yaml:"admin"`
-	Client      KeycloakClient `yaml:"client"`
+	KeyCloak struct {
+		BaseURL     string         `toml:"baseUrl"`
+		AdminRealm  string         `toml:"adminRealm"`
+		ClientRealm string         `toml:"clientRealm"`
+		Admin       KeycloakAdmin  `toml:"admin"`
+		Client      KeycloakClient `toml:"client"`
+	} `toml:"keycloak"`
+	EmailApiConfig struct {
+		RequestUrl string `toml:"requestUrl"`
+		AppKey     string `toml:"appKey"`
+	} `toml:"email_api"`
 }
 
 type KeycloakAdmin struct {
-	AdminClientID     string `yaml:"adminClientID"`
-	AdminClientSecret string `yaml:"adminClientSecret"`
-	AdminUsername     string `yaml:"adminUsername"`
-	AdminPassword     string `yaml:"adminPassword"`
+	AdminClientID     string `toml:"adminClientID"`
+	AdminClientSecret string `toml:"adminClientSecret"`
+	AdminUsername     string `toml:"adminUsername"`
+	AdminPassword     string `toml:"adminPassword"`
 }
 
 type KeycloakClient struct {
-	ClientID     string `yaml:"clientID"`
-	ClientSecret string `yaml:"clientSecret"`
+	ClientID     string `toml:"clientID"`
+	ClientSecret string `toml:"clientSecret"`
 }
 
 // LoadConfig 加载配置文件
 func LoadConfig() (*KeyCloakConfig, error) {
 	rootDir := os.Getenv("ROOT")
-	configPath := filepath.Join(rootDir, "configs/keycloak.yaml")
+	configPath := filepath.Join(rootDir, "configs/toml/keycloak.toml")
 
 	var c KeyCloakConfig
-	data, err := os.ReadFile(configPath)
-
-	if err = yaml.Unmarshal(data, &c); err != nil {
-		return nil, err
+	if _, err := toml.DecodeFile(configPath, &c); err != nil {
+		fmt.Println("Error:", err)
 	}
 	return &c, nil
 }
@@ -44,4 +49,9 @@ func LoadConfig() (*KeyCloakConfig, error) {
 type User struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
+}
+
+// UserInfo 用户信息
+type UserInfo struct {
+	Avatar string `json:"avatar"`
 }

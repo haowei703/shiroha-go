@@ -1,0 +1,30 @@
+[server]
+host = "localhost"
+port = 3000
+
+[database]
+username = "postgres"
+password = "1234"
+host = "localhost"
+port = 5432
+dbname = "shiroha"
+
+# RDS
+#[database]
+#username = "shiroha"
+#password = "a1436381036A"
+#host = "pgm-2zet01v1jua92yklto.pg.rds.aliyuncs.com"
+#port = 5432
+#dbname = "shiroha"
+
+[data.redis]
+host = "localhost"
+port = 6379
+password = ""
+
+[data.mongodb]
+host = "localhost"
+port = 27017
+username = "shiroha"
+password = "a1436381036"
+authSource = "shiroha"

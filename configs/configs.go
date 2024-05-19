@@ -33,14 +33,25 @@ type DatabaseConfig struct {
 type DataConfig struct {
 	Redis struct {
 		Host     string `toml:"host"`
-		Password string `toml:"password"`
 		Port     int    `toml:"port"`
+		Password string `toml:"password"`
 	} `toml:"redis"`
+	MongoDB struct {
+		Host       string `toml:"host"`
+		Port       int    `toml:"port"`
+		Username   string `toml:"username"`
+		Password   string `toml:"password"`
+		AuthSource string `toml:"authSource"`
+	}
 }
 
 func LoadConfig() (*Config, error) {
-	rootDir := os.Getenv("ROOT")
-	configPath := filepath.Join(rootDir, "configs/config.toml")
+	wd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(wd)
+	configPath := filepath.Join(wd, "configs/toml/config.toml")
 
 	var c Config
 	if _, err := toml.DecodeFile(configPath, &c); err != nil {
@@ -48,22 +59,4 @@ func LoadConfig() (*Config, error) {
 		return nil, err
 	}
 	return &c, nil
-}
-
-// ExportDatabaseConfig 导出数据库配置
-func ExportDatabaseConfig(c *Config) *DatabaseConfig {
-	return &DatabaseConfig{
-		Username: c.Database.Username,
-		Password: c.Database.Password,
-		Host:     c.Database.Host,
-		Port:     c.Database.Port,
-		DBName:   c.Database.DBName,
-	}
-}
-
-// ExportRedisConfig 导出redis配置
-func ExportRedisConfig(c *Config) *DataConfig {
-	return &DataConfig{
-		Redis: c.Data.Redis,
-	}
 }
